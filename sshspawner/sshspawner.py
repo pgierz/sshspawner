@@ -6,6 +6,7 @@ import random
 import pwd
 import shutil
 from tempfile import TemporaryDirectory
+import paramiko
 
 from traitlets import Bool, Unicode, Integer, List, observe, default
 from jupyterhub.spawner import Spawner
@@ -106,14 +107,27 @@ class SSHSpawner(Spawner):
 
     async def start(self):
         """Start single-user server on remote host."""
-
+        breakpoint()
         username = self.user.name
+        self.remote_host = self.choose_remote_host()
+        try:
+            client = paramiko.client.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            # FIXME(PG): We still need a way of getting the password from the login form
+            client.connect(self.remote_host, username=username, password=self.user.password)
+        except paramiko.AuthenticationException: 
+            raise PermissionError(f"You are not allowed to log on to {self.remote_host}")
+
+        
         kf = self.ssh_keyfile.format(username=username)
         cf = kf + "-cert.pub"
-        k = asyncssh.read_private_key(kf)
+        try:
+            k = asyncssh.read_private_key(kf)
+        except FileNotFoundError:  # Or IOError?
+            self._keygen(self.ssh_keyfile)
+            k = asyncssh.read_private_key(kf)
         c = asyncssh.read_certificate(cf)
 
-        self.remote_host = self.choose_remote_host()
         
         self.remote_ip, port = await self.remote_random_port()
         if self.remote_ip is None or port is None or port == 0:
@@ -209,6 +223,11 @@ class SSHSpawner(Spawner):
     @observe('remote_ip')
     def _log_remote_ip(self, change):
         self.log.debug("Remote IP was set to %s." % self.remote_ip)
+
+    @staticmethod
+    def _keygen(filename, passwd=None, bits=2048):
+        k = paramiko.RSAKey.generate(bits)
+        k.write_private_key_file(filename, password=passwd)
 
     # FIXME this needs to now return IP and port too
     async def remote_random_port(self):
