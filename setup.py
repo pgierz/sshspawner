@@ -50,7 +50,7 @@ setup_args = dict(
 if 'setuptools' in sys.modules:
     setup_args['install_requires'] = install_requires = []
     with open('requirements.txt') as f:
-        for line in f.readlines():
+        for line in f:
             req = line.strip()
             if not req or req.startswith(('-e', '#')):
                 continue
