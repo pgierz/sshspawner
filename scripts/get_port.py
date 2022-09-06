@@ -5,7 +5,7 @@ import socket
 def main():
     args = parse_arguments()
     if args.ip:
-        print("{} {}".format(port(), ip()))
+        print(f"{port()} {ip()}")
     else:
         print(port())
 

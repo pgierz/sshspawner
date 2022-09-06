@@ -109,12 +109,12 @@ class SSHSpawner(Spawner):
 
         username = self.user.name
         kf = self.ssh_keyfile.format(username=username)
-        cf = kf + "-cert.pub"
+        cf = f"{kf}-cert.pub"
         k = asyncssh.read_private_key(kf)
         c = asyncssh.read_certificate(cf)
 
         self.remote_host = self.choose_remote_host()
-        
+
         self.remote_ip, port = await self.remote_random_port()
         if self.remote_ip is None or port is None or port == 0:
             return False
@@ -144,25 +144,22 @@ class SSHSpawner(Spawner):
                     await asyncssh.scp(files, (conn, self.resource_path))
 
         if self.hub_api_url != "":
-            old = "--hub-api-url={}".format(self.hub.api_url)
-            new = "--hub-api-url={}".format(self.hub_api_url)
+            old = f"--hub-api-url={self.hub.api_url}"
+            new = f"--hub-api-url={self.hub_api_url}"
             for index, value in enumerate(cmd):
                 if value == old:
                     cmd[index] = new
         for index, value in enumerate(cmd):
-            if value[0:6] == '--port':
+            if value[:6] == '--port':
                 cmd[index] = '--port=%d' % (port)
 
         remote_cmd = ' '.join(cmd)
 
         self.pid = await self.exec_notebook(remote_cmd)
 
-        self.log.debug("Starting User: {}, PID: {}".format(self.user.name, self.pid))
+        self.log.debug(f"Starting User: {self.user.name}, PID: {self.pid}")
 
-        if self.pid < 0:
-            return None
-
-        return (self.remote_ip, port)
+        return None if self.pid < 0 else (self.remote_ip, port)
 
     async def poll(self):
         """Poll ssh-spawned process to see if it is still running.
@@ -177,13 +174,12 @@ class SSHSpawner(Spawner):
 
         # send signal 0 to check if PID exists
         alive = await self.remote_signal(0)
-        self.log.debug("Polling returned {}".format(alive))
+        self.log.debug(f"Polling returned {alive}")
 
-        if not alive:
-            self.clear_state()
-            return 0
-        else:
+        if alive:
             return None
+        self.clear_state()
+        return 0
 
     async def stop(self, now=False):
         """Stop single-user server process for the current user."""
@@ -198,16 +194,15 @@ class SSHSpawner(Spawner):
         """
         Given the list of possible nodes from which to choose, make the choice of which should be the remote host.
         """
-        remote_host = random.choice(self.remote_hosts)
-        return remote_host
+        return random.choice(self.remote_hosts)
 
     @observe('remote_host')
     def _log_remote_host(self, change):
-        self.log.debug("Remote host was set to %s." % self.remote_host)
+        self.log.debug(f"Remote host was set to {self.remote_host}.")
 
     @observe('remote_ip')
     def _log_remote_ip(self, change):
-        self.log.debug("Remote IP was set to %s." % self.remote_ip)
+        self.log.debug(f"Remote IP was set to {self.remote_ip}.")
 
     # FIXME this needs to now return IP and port too
     async def remote_random_port(self):
@@ -217,7 +212,7 @@ class SSHSpawner(Spawner):
 
         username = self.get_remote_user(self.user.name)
         kf = self.ssh_keyfile.format(username=username)
-        cf = kf + "-cert.pub"
+        cf = f"{kf}-cert.pub"
         k = asyncssh.read_private_key(kf)
         c = asyncssh.read_certificate(cf)
 
@@ -231,12 +226,12 @@ class SSHSpawner(Spawner):
         if stdout != b"":
             ip, port = stdout.split()
             port = int(port)
-            self.log.debug("ip={} port={}".format(ip, port))
+            self.log.debug(f"ip={ip} port={port}")
         else:
             ip, port = None, None
             self.log.error("Failed to get a remote port")
-            self.log.error("STDERR={}".format(stderr))
-            self.log.debug("EXITSTATUS={}".format(retcode))
+            self.log.error(f"STDERR={stderr}")
+            self.log.debug(f"EXITSTATUS={retcode}")
         return (ip, port)
 
     # FIXME add docstring
@@ -249,7 +244,7 @@ class SSHSpawner(Spawner):
             env['PATH'] = self.path
         username = self.get_remote_user(self.user.name)
         kf = self.ssh_keyfile.format(username=username)
-        cf = kf + "-cert.pub"
+        cf = f"{kf}-cert.pub"
         k = asyncssh.read_private_key(kf)
         c = asyncssh.read_certificate(cf)
         bash_script_str = "#!/bin/bash\n"
@@ -265,14 +260,13 @@ class SSHSpawner(Spawner):
         bash_script_str += '%s < /dev/null >> .jupyter.log 2>&1 & pid=$!\n' % command
         bash_script_str += 'echo $pid\n'
 
-        run_script = "/tmp/{}_run.sh".format(self.user.name)
+        run_script = f"/tmp/{self.user.name}_run.sh"
         with open(run_script, "w") as f:
             f.write(bash_script_str)
         if not os.path.isfile(run_script):
-            raise Exception("The file " + run_script + "was not created.")
-        else:
-            with open(run_script, "r") as f:
-                self.log.debug(run_script + " was written as:\n" + f.read())
+            raise Exception(f"The file {run_script}was not created.")
+        with open(run_script, "r") as f:
+            self.log.debug(run_script + " was written as:\n" + f.read())
 
         async with asyncssh.connect(self.remote_ip, username=username,client_keys=[(k,c)],known_hosts=None) as conn:
             result = await conn.run("bash -s", stdin=run_script)
@@ -280,7 +274,7 @@ class SSHSpawner(Spawner):
             stderr = result.stderr
             retcode = result.exit_status
 
-        self.log.debug("exec_notebook status={}".format(retcode))
+        self.log.debug(f"exec_notebook status={retcode}")
         if stdout != b'':
             pid = int(stdout)
         else:
@@ -293,7 +287,7 @@ class SSHSpawner(Spawner):
 
         username = self.get_remote_user(self.user.name)
         kf = self.ssh_keyfile.format(username=username)
-        cf = kf + "-cert.pub"
+        cf = f"{kf}-cert.pub"
         k = asyncssh.read_private_key(kf)
         c = asyncssh.read_certificate(cf)
 
@@ -304,7 +298,10 @@ class SSHSpawner(Spawner):
             stdout = result.stdout
             stderr = result.stderr
             retcode = result.exit_status
-        self.log.debug("command: {} returned {} --- {} --- {}".format(command, stdout, stderr, retcode))
+        self.log.debug(
+            f"command: {command} returned {stdout} --- {stderr} --- {retcode}"
+        )
+
         return (retcode == 0)
 
     def stage_certs(self, paths, dest):
