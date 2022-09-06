@@ -122,6 +122,7 @@ class SSHSpawner(Spawner):
         cmd = []
 
         cmd.extend(self.cmd)
+        cmd.extend([f"--port={self.remote_port}"])
         cmd.extend(self.get_args())
 
         if self.user.settings["internal_ssl"]:
@@ -257,7 +258,14 @@ class SSHSpawner(Spawner):
         for item in env.items():
             # item is a (key, value) tuple
             # command = ('export %s=%s;' % item) + command
-            bash_script_str += 'export %s=%s\n' % item
+            if item[0] == "JUPYTERHUB_OAUTH_SCOPES":
+                #key = item[0]
+                #value = item[1].replace(" ", "").replace('"', "'")
+                #bash_script_str += f'export {key}={value}'+'\n'
+                #bash_script_str += '["access:servers!server={username}/", "access:servers!user={username}"]'+'\n'
+                pass  # Apparently, not setting anything seems to do the trick ;-)
+            else:
+                bash_script_str += 'export %s=%s\n' % item
         bash_script_str += 'unset XDG_RUNTIME_DIR\n'
 
         bash_script_str += 'touch .jupyter.log\n'
