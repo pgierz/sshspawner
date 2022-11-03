@@ -109,9 +109,9 @@ class SSHSpawner(Spawner):
 
         username = self.user.name
         kf = self.ssh_keyfile.format(username=username)
-        cf = kf + "-cert.pub"
+        #cf = kf + "-cert.pub"
         k = asyncssh.read_private_key(kf)
-        c = asyncssh.read_certificate(cf)
+        #c = asyncssh.read_certificate(cf)
 
         self.remote_host = self.choose_remote_host()
         
@@ -129,19 +129,19 @@ class SSHSpawner(Spawner):
             with TemporaryDirectory() as td:
                 local_resource_path = td
 
-                self.cert_paths = self.stage_certs(
-                        self.cert_paths,
-                        local_resource_path
-                    )
+                #self.cert_paths = self.stage_certs(
+                #        self.cert_paths,
+                #        local_resource_path
+                #    )
 
                 # create resource path dir in user's home on remote
-                async with asyncssh.connect(self.remote_ip, username=username,client_keys=[(k,c)],known_hosts=None) as conn:
+                async with asyncssh.connect(self.remote_ip, username=username,client_keys=k,known_hosts=None) as conn:
                     mkdir_cmd = "mkdir -p {path} 2>/dev/null".format(path=self.resource_path)
                     result = await conn.run(mkdir_cmd)
 
                 # copy files
                 files = [os.path.join(local_resource_path, f) for f in os.listdir(local_resource_path)]
-                async with asyncssh.connect(self.remote_ip, username=username,client_keys=[(k,c)],known_hosts=None) as conn:
+                async with asyncssh.connect(self.remote_ip, username=username,client_keys=k,known_hosts=None) as conn:
                     await asyncssh.scp(files, (conn, self.resource_path))
 
         if self.hub_api_url != "":
@@ -218,12 +218,12 @@ class SSHSpawner(Spawner):
 
         username = self.get_remote_user(self.user.name)
         kf = self.ssh_keyfile.format(username=username)
-        cf = kf + "-cert.pub"
+        #cf = kf + "-cert.pub"
         k = asyncssh.read_private_key(kf)
-        c = asyncssh.read_certificate(cf)
+        #c = asyncssh.read_certificate(cf)
 
         # this needs to be done against remote_host, first time we're calling up
-        async with asyncssh.connect(self.remote_host,username=username,client_keys=[(k,c)],known_hosts=None) as conn:
+        async with asyncssh.connect(self.remote_host,username=username,client_keys=k,known_hosts=None) as conn:
             result = await conn.run(self.remote_port_command)
             stdout = result.stdout
             stderr = result.stderr
@@ -250,9 +250,9 @@ class SSHSpawner(Spawner):
             env['PATH'] = self.path
         username = self.get_remote_user(self.user.name)
         kf = self.ssh_keyfile.format(username=username)
-        cf = kf + "-cert.pub"
+        #cf = kf + "-cert.pub"
         k = asyncssh.read_private_key(kf)
-        c = asyncssh.read_certificate(cf)
+        #c = asyncssh.read_certificate(cf)
         bash_script_str = "#!/bin/bash\n"
 
         for item in env.items():
@@ -282,7 +282,7 @@ class SSHSpawner(Spawner):
             with open(run_script, "r") as f:
                 self.log.debug(run_script + " was written as:\n" + f.read())
 
-        async with asyncssh.connect(self.remote_ip, username=username,client_keys=[(k,c)],known_hosts=None) as conn:
+        async with asyncssh.connect(self.remote_ip, username=username,client_keys=k,known_hosts=None) as conn:
             result = await conn.run("bash -s", stdin=run_script)
             stdout = result.stdout
             stderr = result.stderr
@@ -301,13 +301,13 @@ class SSHSpawner(Spawner):
 
         username = self.get_remote_user(self.user.name)
         kf = self.ssh_keyfile.format(username=username)
-        cf = kf + "-cert.pub"
+        #cf = kf + "-cert.pub"
         k = asyncssh.read_private_key(kf)
-        c = asyncssh.read_certificate(cf)
+        #c = asyncssh.read_certificate(cf)
 
         command = "kill -s %s %d < /dev/null"  % (sig, self.pid)
 
-        async with asyncssh.connect(self.remote_ip, username=username,client_keys=[(k,c)],known_hosts=None) as conn:
+        async with asyncssh.connect(self.remote_ip, username=username, client_keys=k, known_hosts=None) as conn:
             result = await conn.run(command)
             stdout = result.stdout
             stderr = result.stderr
@@ -315,21 +315,21 @@ class SSHSpawner(Spawner):
         self.log.debug("command: {} returned {} --- {} --- {}".format(command, stdout, stderr, retcode))
         return (retcode == 0)
 
-    def stage_certs(self, paths, dest):
-        shutil.move(paths['keyfile'], dest)
-        shutil.move(paths['certfile'], dest)
-        shutil.copy(paths['cafile'], dest)
+    #def stage_certs(self, paths, dest):
+    #    shutil.move(paths['keyfile'], dest)
+    #    shutil.move(paths['certfile'], dest)
+    #    shutil.copy(paths['cafile'], dest)
 
-        key_base_name = os.path.basename(paths['keyfile'])
-        cert_base_name = os.path.basename(paths['certfile'])
-        ca_base_name = os.path.basename(paths['cafile'])
+    #    key_base_name = os.path.basename(paths['keyfile'])
+    #    cert_base_name = os.path.basename(paths['certfile'])
+    #    ca_base_name = os.path.basename(paths['cafile'])
 
-        key = os.path.join(self.resource_path, key_base_name)
-        cert = os.path.join(self.resource_path, cert_base_name)
-        ca = os.path.join(self.resource_path, ca_base_name)
+    #    key = os.path.join(self.resource_path, key_base_name)
+    #    cert = os.path.join(self.resource_path, cert_base_name)
+    #    ca = os.path.join(self.resource_path, ca_base_name)
 
-        return {
-            "keyfile": key,
-            "certfile": cert,
-            "cafile": ca,
-        }
+    #    return {
+    #        "keyfile": key,
+    #        "certfile": cert,
+    #        "cafile": ca,
+    #    }
