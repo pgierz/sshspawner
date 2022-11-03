@@ -17,31 +17,29 @@ class SSHSpawner(Spawner):
     # http://traitlets.readthedocs.io/en/stable/migration.html#separation-of-metadata-and-keyword-arguments-in-traittype-contructors
     # config is an unrecognized keyword
 
-    remote_hosts = List(trait=Unicode(),
-            help="Possible remote hosts from which to choose remote_host.",
-            config=True)
+    remote_hosts = List(
+        trait=Unicode(),
+        help="Possible remote hosts from which to choose remote_host.",
+        config=True,
+    )
 
     # Removed 'config=True' tag.
     # Any user configureation of remote_host is redundant.
     # The spawner now chooses the value of remote_host.
-    remote_host = Unicode("remote_host",
-            help="SSH remote host to spawn sessions on")
+    remote_host = Unicode("remote_host", help="SSH remote host to spawn sessions on")
 
     # This is a external remote IP, let the server listen on all interfaces if we want
-    remote_ip = Unicode("remote_ip",
-            help="IP on remote side")
+    remote_ip = Unicode("remote_ip", help="IP on remote side")
 
-    remote_port = Unicode("22",
-            help="SSH remote port number",
-            config=True)
+    remote_port = Unicode("22", help="SSH remote port number", config=True)
 
-    ssh_command = Unicode("/usr/bin/ssh",
-            help="Actual SSH command",
-            config=True)
+    ssh_command = Unicode("/usr/bin/ssh", help="Actual SSH command", config=True)
 
-    path = Unicode("/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin",
-            help="Default PATH (should include jupyter and python)",
-            config=True)
+    path = Unicode(
+        "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin",
+        help="Default PATH (should include jupyter and python)",
+        config=True,
+    )
 
     # The get_port.py script is in scripts/get_port.py
     # FIXME See if we avoid having to deploy a script on remote side?
@@ -49,34 +47,52 @@ class SSHSpawner(Spawner):
     # as a package and have it put get_port.py in the right place.
     # If we were fancy it could be configurable so it could be restricted
     # to specific ports.
-    remote_port_command = Unicode("/usr/bin/python /usr/local/bin/get_port.py",
-            help="Command to return unused port on remote host",
-            config=True)
+    remote_port_command = Unicode(
+        "/usr/bin/python /usr/local/bin/get_port.py",
+        help="Command to return unused port on remote host",
+        config=True,
+    )
 
     # FIXME Fix help, what happens when not set?
-    hub_api_url = Unicode("",
-            help=dedent("""If set, Spawner will configure the containers to use
+    hub_api_url = Unicode(
+        "",
+        help=dedent(
+            """If set, Spawner will configure the containers to use
             the specified URL to connect the hub api. This is useful when the
             hub_api is bound to listen on all ports or is running inside of a
-            container."""),
-            config=True)
+            container."""
+        ),
+        config=True,
+    )
 
-    ssh_keyfile = Unicode("~/.ssh/id_rsa",
-            help=dedent("""Key file used to authenticate hub with remote host.
+    ssh_keyfile = Unicode(
+        "~/.ssh/id_rsa",
+        help=dedent(
+            """Key file used to authenticate hub with remote host.
 
             `~` will be expanded to the user's home directory and `{username}`
-            will be expanded to the user's username"""),
-            config=True)
+            will be expanded to the user's username"""
+        ),
+        config=True,
+    )
 
-    pid = Integer(0,
-            help=dedent("""Process ID of single-user server process spawned for
-            current user."""))
+    pid = Integer(
+        0,
+        help=dedent(
+            """Process ID of single-user server process spawned for
+            current user."""
+        ),
+    )
 
-    resource_path = Unicode(".jupyterhub-resources",
-            help=dedent("""The base path where all necessary resources are
+    resource_path = Unicode(
+        ".jupyterhub-resources",
+        help=dedent(
+            """The base path where all necessary resources are
             placed. Generally left relative so that resources are placed into
-            this base directory in the user's home directory."""),
-            config=True)
+            this base directory in the user's home directory."""
+        ),
+        config=True,
+    )
 
     def load_state(self, state):
         """Restore state about ssh-spawned server after a hub restart.
@@ -107,23 +123,17 @@ class SSHSpawner(Spawner):
 
     async def start(self):
         """Start single-user server on remote host."""
-        breakpoint()
         username = self.user.name
+        password = self.environment["upstream_token"]["password"]
         self.remote_host = self.choose_remote_host()
         try:
             client = paramiko.client.SSHClient()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            # FIXME(PG): We still need a way of getting the password from the login form
-            client.connect(self.remote_host, username=username, password=self.user.password)
-        except paramiko.AuthenticationException: 
-            raise PermissionError(f"You are not allowed to log on to {self.remote_host}")
-
-        
-        kf = self.ssh_keyfile.format(username=username)
-        #cf = kf + "-cert.pub"
-        k = asyncssh.read_private_key(kf)
-        #c = asyncssh.read_certificate(cf)
-        
+            client.connect(self.remote_host, username=username, password=password)
+        except paramiko.AuthenticationException:
+            raise PermissionError(
+                f"You are not allowed to log on to {self.remote_host}"
+            )
         self.remote_ip, port = await self.remote_random_port()
         if self.remote_ip is None or port is None or port == 0:
             return False
@@ -138,19 +148,28 @@ class SSHSpawner(Spawner):
             with TemporaryDirectory() as td:
                 local_resource_path = td
 
-                #self.cert_paths = self.stage_certs(
-                #        self.cert_paths,
-                #        local_resource_path
-                #    )
-
-                # create resource path dir in user's home on remote
-                async with asyncssh.connect(self.remote_ip, username=username,client_keys=k,known_hosts=None) as conn:
-                    mkdir_cmd = "mkdir -p {path} 2>/dev/null".format(path=self.resource_path)
+                async with asyncssh.connect(
+                    self.remote_ip,
+                    username=username,
+                    password=password,
+                    known_hosts=None,
+                ) as conn:
+                    mkdir_cmd = "mkdir -p {path} 2>/dev/null".format(
+                        path=self.resource_path
+                    )
                     result = await conn.run(mkdir_cmd)
 
                 # copy files
-                files = [os.path.join(local_resource_path, f) for f in os.listdir(local_resource_path)]
-                async with asyncssh.connect(self.remote_ip, username=username,client_keys=k,known_hosts=None) as conn:
+                files = [
+                    os.path.join(local_resource_path, f)
+                    for f in os.listdir(local_resource_path)
+                ]
+                async with asyncssh.connect(
+                    self.remote_ip,
+                    username=username,
+                    password=password,
+                    known_hosts=None,
+                ) as conn:
                     await asyncssh.scp(files, (conn, self.resource_path))
 
         if self.hub_api_url != "":
@@ -160,10 +179,10 @@ class SSHSpawner(Spawner):
                 if value == old:
                     cmd[index] = new
         for index, value in enumerate(cmd):
-            if value[0:6] == '--port':
-                cmd[index] = '--port=%d' % (port)
+            if value[0:6] == "--port":
+                cmd[index] = "--port=%d" % (port)
 
-        remote_cmd = ' '.join(cmd)
+        remote_cmd = " ".join(cmd)
 
         self.pid = await self.exec_notebook(remote_cmd)
 
@@ -181,7 +200,7 @@ class SSHSpawner(Spawner):
         code of the process if we have access to it, or 0 otherwise."""
 
         if not self.pid:
-                # no pid, not running
+            # no pid, not running
             self.clear_state()
             return 0
 
@@ -211,11 +230,11 @@ class SSHSpawner(Spawner):
         remote_host = random.choice(self.remote_hosts)
         return remote_host
 
-    @observe('remote_host')
+    @observe("remote_host")
     def _log_remote_host(self, change):
         self.log.debug("Remote host was set to %s." % self.remote_host)
 
-    @observe('remote_ip')
+    @observe("remote_ip")
     def _log_remote_ip(self, change):
         self.log.debug("Remote IP was set to %s." % self.remote_ip)
 
@@ -226,18 +245,17 @@ class SSHSpawner(Spawner):
 
     # FIXME this needs to now return IP and port too
     async def remote_random_port(self):
-        """Select unoccupied port on the remote host and return it. 
-        
+        """Select unoccupied port on the remote host and return it.
+
         If this fails for some reason return `None`."""
 
         username = self.get_remote_user(self.user.name)
-        kf = self.ssh_keyfile.format(username=username)
-        #cf = kf + "-cert.pub"
-        k = asyncssh.read_private_key(kf)
-        #c = asyncssh.read_certificate(cf)
+        password = self.environment["upstream_token"]["password"]
 
         # this needs to be done against remote_host, first time we're calling up
-        async with asyncssh.connect(self.remote_host,username=username,client_keys=k,known_hosts=None) as conn:
+        async with asyncssh.connect(
+            self.remote_host, username=username, password=password, known_hosts=None
+        ) as conn:
             result = await conn.run(self.remote_port_command)
             stdout = result.stdout
             stderr = result.stderr
@@ -259,33 +277,30 @@ class SSHSpawner(Spawner):
         """TBD"""
 
         env = super(SSHSpawner, self).get_env()
-        env['JUPYTERHUB_API_URL'] = self.hub_api_url
+        env["JUPYTERHUB_API_URL"] = self.hub_api_url
         if self.path:
-            env['PATH'] = self.path
+            env["PATH"] = self.path
         username = self.get_remote_user(self.user.name)
-        kf = self.ssh_keyfile.format(username=username)
-        #cf = kf + "-cert.pub"
-        k = asyncssh.read_private_key(kf)
-        #c = asyncssh.read_certificate(cf)
+        password = self.environment["upstream_token"]["password"]
         bash_script_str = "#!/bin/bash\n"
 
         for item in env.items():
             # item is a (key, value) tuple
             # command = ('export %s=%s;' % item) + command
             if item[0] == "JUPYTERHUB_OAUTH_SCOPES":
-                #key = item[0]
-                #value = item[1].replace(" ", "").replace('"', "'")
-                #bash_script_str += f'export {key}={value}'+'\n'
-                #bash_script_str += '["access:servers!server={username}/", "access:servers!user={username}"]'+'\n'
+                # key = item[0]
+                # value = item[1].replace(" ", "").replace('"', "'")
+                # bash_script_str += f'export {key}={value}'+'\n'
+                # bash_script_str += '["access:servers!server={username}/", "access:servers!user={username}"]'+'\n'
                 pass  # Apparently, not setting anything seems to do the trick ;-)
             else:
-                bash_script_str += 'export %s=%s\n' % item
-        bash_script_str += 'unset XDG_RUNTIME_DIR\n'
+                bash_script_str += "export %s=%s\n" % item
+        bash_script_str += "unset XDG_RUNTIME_DIR\n"
 
-        bash_script_str += 'touch .jupyter.log\n'
-        bash_script_str += 'chmod 600 .jupyter.log\n'
-        bash_script_str += '%s < /dev/null >> .jupyter.log 2>&1 & pid=$!\n' % command
-        bash_script_str += 'echo $pid\n'
+        bash_script_str += "touch .jupyter.log\n"
+        bash_script_str += "chmod 600 .jupyter.log\n"
+        bash_script_str += "%s < /dev/null >> .jupyter.log 2>&1 & pid=$!\n" % command
+        bash_script_str += "echo $pid\n"
 
         run_script = "/tmp/{}_run.sh".format(self.user.name)
         with open(run_script, "w") as f:
@@ -296,14 +311,16 @@ class SSHSpawner(Spawner):
             with open(run_script, "r") as f:
                 self.log.debug(run_script + " was written as:\n" + f.read())
 
-        async with asyncssh.connect(self.remote_ip, username=username,client_keys=k,known_hosts=None) as conn:
+        async with asyncssh.connect(
+            self.remote_ip, username=username, password=password, known_hosts=None
+        ) as conn:
             result = await conn.run("bash -s", stdin=run_script)
             stdout = result.stdout
             stderr = result.stderr
             retcode = result.exit_status
 
         self.log.debug("exec_notebook status={}".format(retcode))
-        if stdout != b'':
+        if stdout != b"":
             pid = int(stdout)
         else:
             return -1
@@ -314,36 +331,20 @@ class SSHSpawner(Spawner):
         """Signal on the remote host."""
 
         username = self.get_remote_user(self.user.name)
-        kf = self.ssh_keyfile.format(username=username)
-        #cf = kf + "-cert.pub"
-        k = asyncssh.read_private_key(kf)
-        #c = asyncssh.read_certificate(cf)
+        password = self.environment["upstream_token"]["password"]
 
-        command = "kill -s %s %d < /dev/null"  % (sig, self.pid)
+        command = "kill -s %s %d < /dev/null" % (sig, self.pid)
 
-        async with asyncssh.connect(self.remote_ip, username=username, client_keys=k, known_hosts=None) as conn:
+        async with asyncssh.connect(
+            self.remote_ip, username=username, password=password, known_hosts=None
+        ) as conn:
             result = await conn.run(command)
             stdout = result.stdout
             stderr = result.stderr
             retcode = result.exit_status
-        self.log.debug("command: {} returned {} --- {} --- {}".format(command, stdout, stderr, retcode))
-        return (retcode == 0)
-
-    #def stage_certs(self, paths, dest):
-    #    shutil.move(paths['keyfile'], dest)
-    #    shutil.move(paths['certfile'], dest)
-    #    shutil.copy(paths['cafile'], dest)
-
-    #    key_base_name = os.path.basename(paths['keyfile'])
-    #    cert_base_name = os.path.basename(paths['certfile'])
-    #    ca_base_name = os.path.basename(paths['cafile'])
-
-    #    key = os.path.join(self.resource_path, key_base_name)
-    #    cert = os.path.join(self.resource_path, cert_base_name)
-    #    ca = os.path.join(self.resource_path, ca_base_name)
-
-    #    return {
-    #        "keyfile": key,
-    #        "certfile": cert,
-    #        "cafile": ca,
-    #    }
+        self.log.debug(
+            "command: {} returned {} --- {} --- {}".format(
+                command, stdout, stderr, retcode
+            )
+        )
+        return retcode == 0
