@@ -1,15 +1,16 @@
-import asyncio, asyncssh
+import asyncio
 import os
-from textwrap import dedent
-import warnings
-import random
 import pwd
+import random
 import shutil
+import warnings
 from tempfile import TemporaryDirectory
-import paramiko
+from textwrap import dedent
 
-from traitlets import Bool, Unicode, Integer, List, observe, default
+import asyncssh
+import paramiko
 from jupyterhub.spawner import Spawner
+from traitlets import Bool, Integer, List, Unicode, default, observe
 
 
 class SSHSpawner(Spawner):
@@ -131,6 +132,7 @@ class SSHSpawner(Spawner):
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             client.connect(self.remote_host, username=username, password=password)
         except paramiko.AuthenticationException:
+            # TODO: Figure out how to redirect to a Forbidden page
             raise PermissionError(
                 f"You are not allowed to log on to {self.remote_host}"
             )
